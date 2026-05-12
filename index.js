@@ -247,9 +247,13 @@ async function generateProductAngles(imagePath) {
 }
 
 // --- Step 3b: Generate structured product listing with Claude ---
-async function generateProductListing(imagePath) {
+async function generateProductListing(imagePath, extraDetails = '') {
   const buffer = fs.readFileSync(imagePath);
-  const prompt = `You are a product listing assistant for an Indian stationery shop. Analyze this product image and generate a JSON object. Respond with ONLY valid JSON, no markdown, no explanation.
+  const extraSection = extraDetails.trim()
+    ? `\n\nThe seller has provided these additional product details — treat them as ground truth and prioritise them over what you infer from the image:\n${extraDetails.trim()}`
+    : '';
+
+  const prompt = `You are a product listing assistant for an Indian stationery shop. Analyze this product image and generate a JSON object. Respond with ONLY valid JSON, no markdown, no explanation.${extraSection}
 
 Required JSON structure:
 {
@@ -444,6 +448,7 @@ bot.on('photo', async (msg) => {
   const chatId = msg.chat.id;
   const photo = msg.photo[msg.photo.length - 1];
   const fileId = photo.file_id;
+  const extraDetails = msg.caption || '';
 
   try {
     // Phase 1: Download
@@ -457,7 +462,10 @@ bot.on('photo', async (msg) => {
     fs.writeFileSync(localPath, downloadRes.data);
 
     console.log(`Photo received: ${filename}`);
-    await bot.sendMessage(chatId, 'Got your photo! Processing...');
+    const ackMsg = extraDetails
+      ? `Got your photo + details! Processing...\n\n📋 *Details noted:*\n${extraDetails}`
+      : 'Got your photo! Processing...';
+    await bot.sendMessage(chatId, ackMsg, { parse_mode: 'Markdown' });
 
     // Phase 2, Step 1: Validate with Claude
     const isProduct = await validateProductPhoto(localPath);
@@ -488,7 +496,7 @@ bot.on('photo', async (msg) => {
     }
 
     // Phase 2, Step 4: Generate listing with Claude
-    const listing = await generateProductListing(imageForListing);
+    const listing = await generateProductListing(imageForListing, extraDetails);
 
     // Phase 3: Save to Supabase inventory
     const product = await saveToInventory(listing, imageForListing);
