@@ -1,0 +1,52 @@
+services:
+  - type: web
+    name: shopbot
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: node index.js
+    healthCheckPath: /
+    envVars:
+      - key: NODE_ENV
+        value: production
+
+      # Set RENDER_URL to your app's public URL after first deploy
+      # e.g. https://shopbot.onrender.com
+      - key: RENDER_URL
+        sync: false
+
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+
+      - key: ANTHROPIC_API_KEY
+        sync: false
+
+      - key: REMOVE_BG_API_KEY
+        sync: false
+
+      - key: SUPABASE_URL
+        sync: false
+
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+
+      - key: AMAZON_LWA_CLIENT_ID
+        sync: false
+
+      - key: AMAZON_LWA_CLIENT_SECRET
+        sync: false
+
+      - key: AMAZON_LWA_REFRESH_TOKEN
+        sync: false
+
+      - key: AMAZON_SELLER_ID
+        sync: false
+
+      - key: AMAZON_MARKETPLACE_ID
+        value: A21TJRUUN4KGV
+
+      - key: FLIPKART_CLIENT_ID
+        sync: false
+
+      - key: FLIPKART_CLIENT_SECRET
+        sync: false
