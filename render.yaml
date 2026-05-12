@@ -24,6 +24,9 @@ services:
       - key: REMOVE_BG_API_KEY
         sync: false
 
+      - key: STABILITY_API_KEY
+        sync: false
+
       - key: SUPABASE_URL
         sync: false
 

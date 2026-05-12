@@ -192,7 +192,61 @@ async function removeBackground(imagePath) {
   return outputPath;
 }
 
-// --- Step 3: Generate structured product listing with Claude ---
+// --- Step 3a: Generate multiple product angles via Stability AI ---
+const ANGLES = [
+  { label: 'front', prompt: 'product photo, front view, plain white background, professional e-commerce lighting' },
+  { label: 'side', prompt: 'product photo, side view, plain white background, professional e-commerce lighting' },
+  { label: '3q', prompt: 'product photo, three-quarter angle view, plain white background, professional e-commerce lighting' },
+];
+
+async function generateProductAngles(imagePath) {
+  if (!process.env.STABILITY_API_KEY) {
+    console.log('STABILITY_API_KEY not set — skipping angle generation.');
+    return [];
+  }
+
+  const baseName = path.basename(imagePath, path.extname(imagePath));
+  const generatedPaths = [];
+
+  for (const angle of ANGLES) {
+    try {
+      const form = new FormData();
+      form.append('init_image', fs.readFileSync(imagePath), {
+        filename: path.basename(imagePath),
+        contentType: 'image/png',
+      });
+      form.append('init_image_mode', 'IMAGE_STRENGTH');
+      form.append('image_strength', '0.35');
+      form.append('text_prompts[0][text]', angle.prompt);
+      form.append('text_prompts[0][weight]', '1');
+      form.append('text_prompts[1][text]', 'blurry, low quality, watermark, text, logo');
+      form.append('text_prompts[1][weight]', '-1');
+      form.append('cfg_scale', '7');
+      form.append('samples', '1');
+      form.append('steps', '30');
+
+      const response = await axios.post(
+        'https://api.stability.ai/v1/generation/stable-diffusion-xl-1024-v1-0/image-to-image',
+        form,
+        {
+          headers: { ...form.getHeaders(), Authorization: `Bearer ${process.env.STABILITY_API_KEY}`, Accept: 'application/json' },
+        }
+      );
+
+      const artifact = response.data.artifacts[0];
+      const outputPath = path.join(downloadsDir, `${baseName}-${angle.label}.png`);
+      fs.writeFileSync(outputPath, Buffer.from(artifact.base64, 'base64'));
+      generatedPaths.push({ label: angle.label, path: outputPath });
+      console.log(`Angle generated: ${angle.label}`);
+    } catch (err) {
+      console.error(`Angle generation failed (${angle.label}):`, err.message);
+    }
+  }
+
+  return generatedPaths;
+}
+
+// --- Step 3b: Generate structured product listing with Claude ---
 async function generateProductListing(imagePath) {
   const buffer = fs.readFileSync(imagePath);
   const prompt = `You are a product listing assistant for an Indian stationery shop. Analyze this product image and generate a JSON object. Respond with ONLY valid JSON, no markdown, no explanation.
@@ -422,7 +476,18 @@ bot.on('photo', async (msg) => {
       await bot.sendMessage(chatId, 'Background removal failed, continuing with original image...');
     }
 
-    // Phase 2, Step 3: Generate listing with Claude
+    // Phase 2, Step 3: Generate multi-angle images via Stability AI (non-fatal)
+    let angleImages = [];
+    try {
+      angleImages = await generateProductAngles(imageForListing);
+      if (angleImages.length > 0) {
+        await bot.sendMessage(chatId, `Generated ${angleImages.length} angle image(s). Generating listing...`);
+      }
+    } catch (angleErr) {
+      console.error('Angle generation failed:', angleErr.message);
+    }
+
+    // Phase 2, Step 4: Generate listing with Claude
     const listing = await generateProductListing(imageForListing);
 
     // Phase 3: Save to Supabase inventory
@@ -445,6 +510,11 @@ bot.on('photo', async (msg) => {
       console.log(`Flipkart draft created: SKU=${flipkartResult.sku}, status=${flipkartResult.status}`);
     } catch (fkErr) {
       console.error('Flipkart listing failed:', fkErr.message);
+    }
+
+    // Send generated angle images back to user
+    for (const img of angleImages) {
+      await bot.sendPhoto(chatId, img.path, { caption: `📸 ${img.label} view` });
     }
 
     await bot.sendMessage(chatId, formatListingMessage(listing, product.id, amazonResult, flipkartResult), { parse_mode: 'Markdown' });
