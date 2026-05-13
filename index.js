@@ -65,7 +65,7 @@ async function validateProductPhoto(imagePath) {
       role: 'user',
       content: [
         { type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: buffer.toString('base64') } },
-        { type: 'text', text: 'Is this a product photo suitable for an e-commerce listing? Reply with only YES or NO.' },
+        { type: 'text', text: 'Does this image contain a physical product, item, or object that could be sold online? It does not need to be a perfect photo — just confirm if there is a product visible. Reply with only YES or NO.' },
       ],
     }],
   });
