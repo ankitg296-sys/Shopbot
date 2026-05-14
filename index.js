@@ -39,21 +39,6 @@ if (isProduction) {
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`Express listening on port ${PORT}`));
 
-// --- SDXL resize — orientation-aware ---
-const SDXL_SIZES = [
-  [1024,1024],[1152,896],[1216,832],[1344,768],[1536,640],
-  [640,1536],[768,1344],[832,1216],[896,1152],
-];
-async function resizeForSDXL(imagePath) {
-  const meta = await sharp(imagePath).metadata();
-  const isPortrait = meta.height > meta.width;
-  const area = meta.width * meta.height;
-  const sameOrientation = SDXL_SIZES.filter(([w, h]) => isPortrait ? h > w : w >= h);
-  const [tw, th] = sameOrientation.reduce((best, s) =>
-    Math.abs(s[0]*s[1]-area) < Math.abs(best[0]*best[1]-area) ? s : best
-  );
-  return sharp(imagePath).resize(tw, th, { fit: 'contain', background: { r: 255, g: 255, b: 255 } }).jpeg().toBuffer();
-}
 
 // --- Step 1: Validate product photo ---
 async function validateProductPhoto(imagePath) {
@@ -132,50 +117,6 @@ async function removeBackgroundAndWhiten(imagePath) {
   return whiteBgPath;
 }
 
-// --- Step 4: Generate product variations ---
-const VARIATIONS = [
-  { label: 'Slight left',  prompt: 'same product slightly rotated left, white background, sharp details', strength: '0.25' },
-  { label: 'Straight on',  prompt: 'same product straight front view, bright white background, crisp clean', strength: '0.15' },
-  { label: 'Slight right', prompt: 'same product slightly rotated right, white background, clear visibility', strength: '0.25' },
-];
-
-async function generateVariations(cleanImagePath, listing, originalImagePath) {
-  const results = [];
-  for (const variation of VARIATIONS) {
-    try {
-      const resizedBuf = await resizeForSDXL(cleanImagePath);
-      const form = new FormData();
-      const prompt = [
-        listing.title, listing.category,
-        'pure white background, isolated product',
-        variation.prompt,
-        'same product, no changes to product shape or color',
-      ].join(', ');
-
-      form.append('image', resizedBuf, { filename: 'product.png', contentType: 'image/png' });
-      form.append('mode', 'image-to-image');
-      form.append('prompt', prompt);
-      form.append('negative_prompt', 'blurry, low quality, watermark, text, logo, colorful background, dark background, hands, people, different product');
-      form.append('strength', variation.strength);
-      form.append('output_format', 'png');
-
-      const stabilityRes = await axios.post(
-        'https://api.stability.ai/v2beta/stable-image/generate/sd3',
-        form,
-        { headers: { ...form.getHeaders(), Authorization: `Bearer ${process.env.STABILITY_API_KEY}`, Accept: 'image/*' }, responseType: 'arraybuffer' }
-      );
-
-      const baseName = path.basename(originalImagePath, path.extname(originalImagePath));
-      const outputPath = path.join(downloadsDir, `${baseName}-${variation.label.replace(/ /g, '-')}.png`);
-      fs.writeFileSync(outputPath, Buffer.from(stabilityRes.data));
-      results.push({ label: variation.label, path: outputPath });
-      console.log(`✅ Variation generated: ${variation.label}`);
-    } catch (err) {
-      console.error(`❌ Variation failed (${variation.label}):`, err.response?.data ? Buffer.from(err.response.data).toString() : err.message);
-    }
-  }
-  return results;
-}
 
 // --- Format listing message ---
 function formatListingMessage(listing) {
@@ -234,14 +175,7 @@ bot.on('photo', async (msg) => {
       await bot.sendMessage(chatId, '⚠️ Background removal failed, continuing with original.');
     }
 
-    // Generate variations
-    await bot.sendMessage(chatId, '🎨 Generating product variations...');
-    const variations = await generateVariations(cleanImagePath, listing, imagePath);
-    for (const v of variations) {
-      await bot.sendPhoto(chatId, v.path, { caption: `📸 ${v.label}` });
-    }
-
-    await bot.sendMessage(chatId, '🎉 *All done!* Listing and images are ready.', { parse_mode: 'Markdown' });
+    await bot.sendMessage(chatId, '🎉 *All done!* Listing and image are ready.', { parse_mode: 'Markdown' });
 
   } catch (err) {
     console.error('Error:', err.message);
