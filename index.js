@@ -166,9 +166,8 @@ bot.on('photo', async (msg) => {
 
     // Remove background + whiten
     await bot.sendMessage(chatId, '✂️ Removing background...');
-    let cleanImagePath = imagePath;
     try {
-      cleanImagePath = await removeBackgroundAndWhiten(imagePath);
+      const cleanImagePath = await removeBackgroundAndWhiten(imagePath);
       await bot.sendPhoto(chatId, cleanImagePath, { caption: '✅ Clean white background' });
     } catch (err) {
       console.error('Background removal failed:', err.message);
