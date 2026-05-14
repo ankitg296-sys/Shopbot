@@ -175,7 +175,7 @@ bot.on('photo', async (msg) => {
       await bot.sendMessage(chatId, '⚠️ Background removal failed, continuing with original.');
     }
 
-    await bot.sendMessage(chatId, '🎉 *All done!* Listing and image are ready.', { parse_mode: 'Markdown' });
+    await bot.sendMessage(chatId, '🎉 *All done!* Listing and images are ready.', { parse_mode: 'Markdown' });
 
   } catch (err) {
     console.error('Error:', err.message);
